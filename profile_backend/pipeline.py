@@ -12,12 +12,7 @@ from profile_backend.config import (
     PROFILE_FILENAME_TEMPLATE,
     SPREADSHEET_PATH,
 )
-from profile_backend.extractor import (
-    ExtractedFields,
-    extract_fields,
-    primary_person_name,
-)
-from profile_backend.metadata_light import extract_light_metadata
+from profile_backend.ai_extractor import AIExtractedFields, extract_fields_ai_provider
 from profile_backend.ids import generate_profile_id
 from profile_backend.models import ProfileRecord
 from profile_backend.organize import (
@@ -48,7 +43,7 @@ def list_inbox_files() -> list[Path]:
 
 
 def _build_record(
-    extracted: ExtractedFields,
+    extracted: AIExtractedFields,
     dob_for_year: str | None,
     final_path: Path,
     upload_date: str,
@@ -97,15 +92,14 @@ def process_one(path: Path) -> ProfileRecord:
     if not text.strip():
         logger.warning("No text extracted from %s", path)
 
-    # Step 2 — light parse (DOB, gender)
-    light = extract_light_metadata(text)
-    logger.debug("Light metadata: dob=%s gender=%s", light.date_of_birth, light.gender)
+    # AI-only extraction for multilingual/unstructured documents
+    extracted = extract_fields_ai_provider(text)
+    logger.debug("AI extraction: name=%s dob=%s gender=%s", extracted.name, extracted.dob, extracted.gender)
 
-    # Steps 3–4 — organize + rename using light parse + spaCy name for filename
-    year_dir = year_folder_from_dob(light.date_of_birth)
-    gender_dir = gender_folder(light.gender)
-    quick_name = primary_person_name(text)
-    base_name = filename_from_name(quick_name, PROFILE_FILENAME_TEMPLATE)
+    # Steps 3–4 — organize + rename using AI extracted values
+    year_dir = year_folder_from_dob(extracted.dob)
+    gender_dir = gender_folder(extracted.gender)
+    base_name = filename_from_name(extracted.name, PROFILE_FILENAME_TEMPLATE)
     upload_date = date.today().isoformat()
 
     final_path = move_to_organized(
@@ -116,10 +110,7 @@ def process_one(path: Path) -> ProfileRecord:
         new_base_name=base_name,
     )
 
-    # Step 6 — full extraction from same text (after file is placed; no re-download)
-    extracted = extract_fields(text, light=light)
-
-    dob_for_row = extracted.dob or light.date_of_birth
+    dob_for_row = extracted.dob
     record = _build_record(
         extracted,
         dob_for_year=dob_for_row,

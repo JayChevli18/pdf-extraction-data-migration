@@ -25,6 +25,18 @@ SPREADSHEET_PATH = _env_path(
 LOG_DIR = _env_path("PROFILE_LOG_DIR", _PROJECT_ROOT / "logs")
 
 SPACY_MODEL = os.environ.get("PROFILE_SPACY_MODEL", "en_core_web_sm")
+LLM_PROVIDER = os.environ.get("PROFILE_LLM_PROVIDER", "ollama")
+LLM_MODEL = os.environ.get("PROFILE_LLM_MODEL", "gpt-4o-mini")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = os.environ.get("OPENAI_BASE_URL", "")
+DEEPAI_API_KEY = os.environ.get("DEEPAI_API_KEY", "")
+DEEPAI_API_URL = os.environ.get(
+    "DEEPAI_API_URL", "https://api.deepai.org/api/text-generator"
+)
+TEXTRAZOR_API_KEY = os.environ.get("TEXTRAZOR_API_KEY", "")
+TEXTRAZOR_API_URL = os.environ.get("TEXTRAZOR_API_URL", "https://api.textrazor.com/")
+OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://127.0.0.1:11434/api/chat")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 
 # Filename for organized files (without extension handling elsewhere)
 PROFILE_FILENAME_TEMPLATE = "{first}_{last}_Profile"
