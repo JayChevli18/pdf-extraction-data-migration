@@ -1,5 +1,7 @@
+README.md
 pyproject.toml
 profile_backend/__init__.py
+profile_backend/ai_extractor.py
 profile_backend/app.py
 profile_backend/config.py
 profile_backend/extractor.py

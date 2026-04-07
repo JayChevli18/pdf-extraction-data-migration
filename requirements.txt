@@ -1,9 +1,6 @@
 # Core
 pdfplumber>=0.11.0
 python-docx>=1.1.0
-spacy>=3.7.0
 openpyxl>=3.1.0
 Flask>=3.0.0
-
-# After install, download the English model:
-# python -m spacy download en_core_web_sm
+openai>=2.30.0

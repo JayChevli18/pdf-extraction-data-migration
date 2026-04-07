@@ -632,3 +632,71 @@ When you later switch from local storage to cloud storage:
 - Replace `file_share_link()` in `profile_backend/organize.py` with the cloud provider share-link logic
 - Replace `list_inbox_files()` / moving logic with cloud folder listing + move operations
 
+---
+
+## AI-only extraction mode (current)
+
+The pipeline now supports an AI-only path through `profile_backend/ai_extractor.py`:
+
+- No manual label dictionary is required in the runtime flow.
+- One LLM call extracts all profile fields from raw document text.
+- Multilingual labels (Hindi/Gujarati/English mixed formats) are handled by the model.
+- Missing values are returned as empty strings (no guessing).
+
+Choose your provider with `PROFILE_LLM_PROVIDER`:
+
+- `ollama` (default, local LLM)
+- `textrazor`
+- `openai`
+- `deepai`
+
+### Ollama setup (recommended for true AI mapping without paid API)
+
+Install Ollama, pull a model, and run locally:
+
+```powershell
+ollama pull qwen2.5:7b
+```
+
+Then set:
+
+```powershell
+$env:PROFILE_LLM_PROVIDER="ollama"
+$env:OLLAMA_API_URL="http://127.0.0.1:11434/api/chat"
+$env:OLLAMA_MODEL="qwen2.5:7b"
+```
+
+### OpenAI setup
+
+```powershell
+$env:PROFILE_LLM_PROVIDER="openai"
+$env:OPENAI_API_KEY="your_openai_key"
+# Optional:
+$env:PROFILE_LLM_MODEL="gpt-4o-mini"
+$env:OPENAI_BASE_URL=""
+```
+
+### DeepAI setup
+
+```powershell
+$env:PROFILE_LLM_PROVIDER="deepai"
+$env:DEEPAI_API_KEY="your_deepai_key"
+# Optional override (defaults to DeepAI text endpoint):
+$env:DEEPAI_API_URL="https://api.deepai.org/api/text-generator"
+```
+
+### TextRazor setup
+
+```powershell
+$env:PROFILE_LLM_PROVIDER="textrazor"
+$env:TEXTRAZOR_API_KEY="your_textrazor_key"
+# Optional override:
+$env:TEXTRAZOR_API_URL="https://api.textrazor.com/"
+```
+
+Then run:
+
+```powershell
+.\.venv\Scripts\python run.py process
+```
+
