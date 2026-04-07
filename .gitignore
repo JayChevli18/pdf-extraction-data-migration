@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.xlsx~
+data/storage/inbox/*
+!data/storage/inbox/.gitkeep
+data/storage/root/**/*
+!data/storage/root/.gitkeep
+logs/*.log
+data/profiles.xlsx
