@@ -38,5 +38,13 @@ TEXTRAZOR_API_URL = os.environ.get("TEXTRAZOR_API_URL", "https://api.textrazor.c
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "http://127.0.0.1:11434/api/chat")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 
+# Google Cloud (Drive + Sheets)
+GOOGLE_CREDS_JSON = os.environ.get("PROFILE_GOOGLE_CREDS_JSON", "")
+GDRIVE_INBOX_FOLDER_ID = os.environ.get("PROFILE_GDRIVE_INBOX_FOLDER_ID", "")
+GDRIVE_ROOT_FOLDER_ID = os.environ.get("PROFILE_GDRIVE_ROOT_FOLDER_ID", "")
+GSHEETS_SPREADSHEET_ID = os.environ.get("PROFILE_GSHEETS_SPREADSHEET_ID", "")
+GSHEETS_SHEET_NAME = os.environ.get("PROFILE_GSHEETS_SHEET_NAME", "Sheet1")
+GDRIVE_SHARE_WITH_EMAILS = os.environ.get("PROFILE_GDRIVE_SHARE_WITH_EMAILS", "")
+
 # Filename for organized files (without extension handling elsewhere)
 PROFILE_FILENAME_TEMPLATE = "{first}_{last}_Profile"
