@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
 
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 from profile_backend.google_auth import load_google_credentials
 
@@ -68,6 +68,36 @@ def download_file_bytes(service, file_id: str) -> bytes:
     while not done:
         _, done = downloader.next_chunk()
     return fh.getvalue()
+
+
+def upload_file_to_folder(
+    service,
+    parent_folder_id: str,
+    file_name: str,
+    data: bytes,
+    mime_type: str | None = None,
+) -> DriveFile:
+    if not mime_type:
+        ext = Path(file_name).suffix.lower()
+        if ext == ".pdf":
+            mime_type = "application/pdf"
+        elif ext == ".docx":
+            mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else:
+            mime_type = "application/octet-stream"
+
+    media = MediaIoBaseUpload(io.BytesIO(data), mimetype=mime_type, resumable=False)
+    metadata = {"name": file_name, "parents": [parent_folder_id]}
+    created = (
+        service.files()
+        .create(body=metadata, media_body=media, fields="id,name,mimeType")
+        .execute()
+    )
+    return DriveFile(
+        id=created["id"],
+        name=created["name"],
+        mime_type=created.get("mimeType", mime_type),
+    )
 
 
 def ensure_folder(service, parent_id: str, name: str) -> str:
