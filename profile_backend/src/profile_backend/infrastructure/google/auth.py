@@ -1,4 +1,4 @@
-"""Google auth helper supporting service account OR OAuth client secrets."""
+"""Google auth helper supporting service account and OAuth client credentials."""
 
 from __future__ import annotations
 
@@ -16,22 +16,14 @@ def load_google_credentials(
     scopes: list[str],
     token_cache_path: str = "token.json",
 ):
-    """
-    Supports:
-    - Service account JSON (type=service_account)
-    - OAuth client secrets JSON (installed/web) with a cached token.json
-    """
-    p = Path(creds_json_path)
-    if not p.exists():
+    path = Path(creds_json_path)
+    if not path.exists():
         raise RuntimeError(f"Credentials file not found: {creds_json_path}")
 
-    raw = json.loads(p.read_text(encoding="utf-8"))
+    raw = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(raw, dict) and raw.get("type") == "service_account":
-        return ServiceAccountCredentials.from_service_account_file(
-            creds_json_path, scopes=scopes
-        )
+        return ServiceAccountCredentials.from_service_account_file(creds_json_path, scopes=scopes)
 
-    # OAuth client secret (web/installed) flow
     token_path = Path(token_cache_path)
     creds = None
     if token_path.exists():
@@ -41,11 +33,8 @@ def load_google_credentials(
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                creds_json_path, scopes=scopes
-            )
+            flow = InstalledAppFlow.from_client_secrets_file(creds_json_path, scopes=scopes)
             creds = flow.run_local_server(port=0)
         token_path.write_text(creds.to_json(), encoding="utf-8")
 
     return creds
-

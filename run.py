@@ -5,8 +5,13 @@ from __future__ import annotations
 import argparse
 import sys
 
-from profile_backend.logging_setup import setup_logging
-from profile_backend.pipeline import list_inbox_files, process_inbox, process_one
+from profile_backend.src.profile_backend.application.services.local_processing import (
+    list_inbox_files,
+    process_inbox,
+    process_one,
+)
+from profile_backend.src.profile_backend.core.logging import setup_logging
+from profile_backend.src.profile_backend.core.settings import settings
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -34,9 +39,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.file:
-        from profile_backend.config import INBOX_DIR
-
-        path = INBOX_DIR / args.file
+        path = settings.inbox_dir / args.file
         if not path.is_file():
             log.error("File not found: %s", path)
             return 1

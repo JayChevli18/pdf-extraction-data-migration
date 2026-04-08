@@ -11,4 +11,8 @@ data/storage/root/**/*
 logs/*.log
 data/profiles.xlsx
 client-secret.json
+client-secret-old.json
 service-account.json
+token.json
+data/storage/temp/
+
