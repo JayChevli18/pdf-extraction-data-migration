@@ -700,3 +700,72 @@ Then run:
 .\.venv\Scripts\python run.py process
 ```
 
+---
+
+## Cloud mode (Google Drive + Google Sheets)
+
+Cloud mode keeps the local pipeline as-is and adds **separate cloud APIs**:
+
+- **Local**:
+  - `POST /process`
+  - `POST /process/<filename>`
+- **Cloud**:
+  - `POST /cloud/process`
+  - `POST /cloud/process/<fileId>`
+
+### What cloud mode does
+
+- Reads profile files from a Google Drive **Inbox folder**
+- Extracts text **in-memory** (no permanent local downloads)
+- Uses your configured AI provider to extract fields
+- Creates/uses Drive folders: `Root / Year / Gender`
+- Moves + renames the file in Drive
+- Generates a read-only **share link** and stores it in the “Drive Link” column
+- Appends a row into a Google Sheet (same column order as local Excel)
+
+### Google setup (recommended: Service Account)
+
+1. Create a Google Cloud project and enable APIs:
+   - Google Drive API
+   - Google Sheets API
+
+2. Create a **Service Account**, download the JSON key.
+
+3. Share the Drive folders and the Google Sheet with the service account email (Editor):
+   - Inbox folder (contains unprocessed files)
+   - Root folder (where organized files will be created)
+   - Google Sheet (where rows will be appended)
+
+### Required environment variables
+
+```powershell
+$env:PROFILE_GOOGLE_CREDS_JSON="D:\path\to\service-account.json"
+$env:PROFILE_GDRIVE_INBOX_FOLDER_ID="your_inbox_folder_id"
+$env:PROFILE_GDRIVE_ROOT_FOLDER_ID="your_root_folder_id"
+$env:PROFILE_GSHEETS_SPREADSHEET_ID="your_spreadsheet_id"
+$env:PROFILE_GSHEETS_SHEET_NAME="Sheet1"   # tab name
+# Optional (security): share processed files only to these emails (comma-separated).
+# If not set, NO public link permission is created.
+$env:PROFILE_GDRIVE_SHARE_WITH_EMAILS="user1@example.com,user2@example.com"
+```
+
+### Run cloud processing via API
+
+Start server:
+
+```powershell
+.\.venv\Scripts\python -m profile_backend.app
+```
+
+Process all inbox files:
+
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:5000/cloud/process
+```
+
+Process one file by Drive fileId:
+
+```powershell
+Invoke-RestMethod -Method Post "http://127.0.0.1:5000/cloud/process/<fileId>"
+```
+

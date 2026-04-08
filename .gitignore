@@ -10,3 +10,5 @@ data/storage/root/**/*
 !data/storage/root/.gitkeep
 logs/*.log
 data/profiles.xlsx
+client-secret.json
+service-account.json
