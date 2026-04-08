@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
+from profile_backend.google_auth import load_google_credentials
 
 SHEETS_SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -12,7 +12,7 @@ SHEETS_SCOPES = [
 
 
 def build_sheets_service(creds_json_path: str):
-    creds = Credentials.from_service_account_file(creds_json_path, scopes=SHEETS_SCOPES)
+    creds = load_google_credentials(creds_json_path, scopes=SHEETS_SCOPES)
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
 

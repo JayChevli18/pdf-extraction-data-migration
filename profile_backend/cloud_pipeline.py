@@ -8,9 +8,11 @@ from pathlib import Path
 
 from profile_backend.ai_extractor import extract_fields_ai_provider
 from profile_backend.config import (
-    GOOGLE_CREDS_JSON,
+    GOOGLE_DRIVE_CREDS_JSON,
+    GOOGLE_SHEETS_CREDS_JSON,
     GDRIVE_INBOX_FOLDER_ID,
     GDRIVE_ROOT_FOLDER_ID,
+    GDRIVE_SHARE_WITH_EMAILS,
     GSHEETS_SHEET_NAME,
     GSHEETS_SPREADSHEET_ID,
     PROFILE_FILENAME_TEMPLATE,
@@ -48,8 +50,8 @@ def _suffix_from_mime(mime_type: str, name: str) -> str:
 
 def process_cloud_inbox() -> list[ProfileRecord]:
     _validate_cloud_config()
-    drive = build_drive_service(GOOGLE_CREDS_JSON)
-    sheets = build_sheets_service(GOOGLE_CREDS_JSON)
+    drive = build_drive_service(GOOGLE_DRIVE_CREDS_JSON)
+    sheets = build_sheets_service(GOOGLE_SHEETS_CREDS_JSON)
 
     results: list[ProfileRecord] = []
     for f in list_inbox_files(drive, GDRIVE_INBOX_FOLDER_ID):
@@ -83,8 +85,9 @@ def process_cloud_one(drive, sheets, file_id: str, name: str, mime_type: str) ->
     new_name = f"{base_name}{suffix}"
     move_and_rename_file(drive, file_id=file_id, new_parent_id=gender_folder_id, new_name=new_name)
 
-    # Share link
-    share_link = ensure_share_link(drive, file_id)
+    # Share link (restricted; no public "anyone" access)
+    share_emails = [e.strip() for e in (GDRIVE_SHARE_WITH_EMAILS or "").split(",") if e.strip()]
+    share_link = ensure_share_link(drive, file_id, share_with_emails=share_emails)
 
     # System fields
     pid = generate_profile_id(extracted.dob)
@@ -131,8 +134,10 @@ def process_cloud_one(drive, sheets, file_id: str, name: str, mime_type: str) ->
 
 def _validate_cloud_config() -> None:
     missing = []
-    if not GOOGLE_CREDS_JSON:
-        missing.append("PROFILE_GOOGLE_CREDS_JSON")
+    if not GOOGLE_DRIVE_CREDS_JSON:
+        missing.append("PROFILE_GOOGLE_DRIVE_CREDS_JSON or PROFILE_GOOGLE_CREDS_JSON")
+    if not GOOGLE_SHEETS_CREDS_JSON:
+        missing.append("PROFILE_GOOGLE_SHEETS_CREDS_JSON or PROFILE_GOOGLE_CREDS_JSON")
     if not GDRIVE_INBOX_FOLDER_ID:
         missing.append("PROFILE_GDRIVE_INBOX_FOLDER_ID")
     if not GDRIVE_ROOT_FOLDER_ID:
