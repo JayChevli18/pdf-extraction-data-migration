@@ -1,14 +1,12 @@
-"""Google Sheets operations for cloud mode."""
+"""Google Sheets operations used by cloud pipeline."""
 
 from __future__ import annotations
 
 from googleapiclient.discovery import build
 
-from profile_backend.google_auth import load_google_credentials
+from profile_backend.src.profile_backend.infrastructure.google.auth import load_google_credentials
 
-SHEETS_SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-]
+SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 
 def build_sheets_service(creds_json_path: str):
@@ -16,12 +14,7 @@ def build_sheets_service(creds_json_path: str):
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
 
-def append_row(
-    service,
-    spreadsheet_id: str,
-    sheet_name: str,
-    row_values: list[object],
-) -> None:
+def append_row(service, spreadsheet_id: str, sheet_name: str, row_values: list[object]) -> None:
     range_name = f"{sheet_name}!A:Z"
     body = {"values": [row_values]}
     (
@@ -36,4 +29,3 @@ def append_row(
         )
         .execute()
     )
-

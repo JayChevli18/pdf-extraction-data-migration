@@ -1,18 +1,17 @@
-"""Application logging: console + rotating file under logs/."""
+"""Application logging setup."""
 
 from __future__ import annotations
 
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
-from profile_backend.config import LOG_DIR
+from profile_backend.src.profile_backend.core.settings import settings
 
 
 def setup_logging(name: str = "profile_backend") -> logging.Logger:
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = LOG_DIR / "profile_backend.log"
+    settings.log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = settings.log_dir / "profile_backend.log"
 
     logger = logging.getLogger(name)
     if logger.handlers:
@@ -24,9 +23,7 @@ def setup_logging(name: str = "profile_backend") -> logging.Logger:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    fh = RotatingFileHandler(
-        log_path, maxBytes=2_000_000, backupCount=5, encoding="utf-8"
-    )
+    fh = RotatingFileHandler(log_path, maxBytes=2_000_000, backupCount=5, encoding="utf-8")
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(fmt)
 

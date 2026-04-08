@@ -1,4 +1,4 @@
-"""System ID generation: BIOYYYYMMDDXXXX."""
+"""Domain ID generation for profile records."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from datetime import datetime
 
 
 def generate_profile_id(dob_iso: str | None) -> str:
-    """BIO + YYYYMMDD from DOB if parseable, else today + random suffix."""
     if dob_iso and len(dob_iso) >= 10:
         try:
             dt = datetime.strptime(dob_iso[:10], "%Y-%m-%d")

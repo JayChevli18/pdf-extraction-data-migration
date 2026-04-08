@@ -1,771 +1,438 @@
-# Profile Document Processing Backend (Local Storage)
+﻿# Profile Backend - Full Project Documentation
 
-This project is a **Python backend** that automatically processes **profile documents** (`.PDF` / `.DOCX`), extracts structured fields, organizes the files into a folder structure, and appends the extracted data into an Excel spreadsheet.
+## Overview
 
-It is designed to replace a manual workflow with a repeatable, logged pipeline.
+This project is a Python backend that processes biodata/profile documents (`.pdf`, `.docx`) and converts them into structured records.
 
----
+It supports two execution modes:
 
-## What this system does (high level)
+- Local mode: local inbox -> local folder organization -> local Excel output
+- Cloud mode: Google Drive inbox -> Drive organization -> Google Sheets output
 
-You drop files into an **inbox folder**:
+Primary capabilities:
 
-- `data/storage/inbox/`  ← put PDFs/DOCXs here
-
-Then you run the pipeline (CLI or API). For each file, it:
-
-1. **Fetch file**: picks the next unprocessed file from the inbox
-2. **Light parse (fast)**: extracts **DOB** + **gender** hints
-3. **Organize file**: moves file to `Root / Year / Gender`
-4. **Rename file**: `FirstName_LastName_Profile` (underscores, keeps extension)
-5. **Generate link**: stores a local `file://...` URI as a “drive link” placeholder
-6. **Full extraction**: extracts all remaining columns (no guessing)
-7. **Generate system fields**: ID, upload date, year
-8. **Insert into spreadsheet**: appends a new row (never overwrites)
-
-Outputs:
-
-- Organized files in: `data/storage/root/<Year>/<Gender>/...`
-- Spreadsheet: `data/profiles.xlsx` (created automatically)
-- Logs: `logs/profile_backend.log`
+- AI-based field extraction (`ollama`, `openai`, `deepai`)
+- DOB normalization to `YYYY-MM-DD`
+- Year derivation from DOB
+- File organization by `Year/Gender`
+- Stable row model for sheet output
+- CLI + HTTP API operation
 
 ---
 
-## Folder structure (local storage)
+## Architecture
+
+The codebase uses strict clean architecture:
 
 ```text
-PDF-Extraction/
-  profile_backend/                # Python package (all backend logic)
-  data/
-    storage/
-      inbox/                      # Input files go here
-      root/                       # Organized output goes here
-    profiles.xlsx                 # Output spreadsheet (auto-created)
-  logs/
-    profile_backend.log           # Pipeline logs (auto-created)
-  run.py                          # CLI entrypoint
-  requirements.txt                # Dependencies
-  pyproject.toml                  # Packaging metadata
+profile_backend/
+  src/
+    profile_backend/
+      api/                      # Flask routes (transport layer)
+      application/services/     # Use-case orchestration
+      core/                     # Shared runtime config/logging
+      domain/                   # Business entities and rules
+      infrastructure/           # External adapters (AI, files, Google, storage)
+      cli/                      # Programmatic CLI helpers
+  tests/                        # Unit/smoke tests
+run.py                          # Main CLI entrypoint
 ```
 
----
+Dependency direction:
 
-## Libraries used (what + why)
-
-This project intentionally uses a small set of well-known libraries:
-
-- **`pdfplumber`**
-  - **What**: Extracts text from PDFs.
-  - **Why**: Good real-world PDF text extraction with page support.
-
-- **`python-docx`**
-  - **What**: Reads `.docx` documents.
-  - **Why**: Standard library for extracting paragraph text from Word files.
-
-- **`spaCy`** (with model `en_core_web_sm`)
-  - **What**: NLP library that can detect entities like **person names** and **dates**.
-  - **Why**: Profiles can have different formats; spaCy helps when “Key: Value” labels are missing.
-  - **Important**: We still do **not** guess. If a value cannot be found, it stays blank.
-
-- **`openpyxl`**
-  - **What**: Reads/writes Excel `.xlsx`.
-  - **Why**: Allows appending rows without overwriting existing content.
-
-- **`Flask`** (optional)
-  - **What**: Tiny HTTP server framework.
-  - **Why**: Lets you trigger the pipeline via API calls (`POST /process`).
-
-Python standard libraries used:
-
-- **`pathlib`**: safer file paths than manual string concatenation
-- **`shutil` / `os`**: file operations (move, create folders)
-- **`logging`**: consistent logs for every step
+- `api` -> `application`
+- `application` -> `domain`, `core`, `infrastructure`
+- `domain` is business-logic focused
+- `infrastructure` contains external I/O integrations
 
 ---
 
-## How to run (step-by-step, Windows PowerShell)
+## Runtime Flow
 
-### 1) Create and install the environment (one-time)
+### Local flow
 
-Open **PowerShell**, then:
+1. Read inbox files (`.pdf`/`.docx`)
+2. Extract text from file
+3. Extract profile fields with AI provider
+4. Normalize DOB to `YYYY-MM-DD`
+5. Derive destination year/gender folders
+6. Rename/move file into organized root
+7. Build `ProfileRecord`
+8. Append row to local Excel
+
+### Cloud flow
+
+1. Validate cloud env vars
+2. Build Drive + Sheets clients
+3. List files in Drive inbox folder
+4. Download file bytes
+5. Extract text from bytes
+6. AI extraction + DOB normalization
+7. Ensure `Year/Gender` folders in Drive
+8. Move + rename file in Drive
+9. Generate Drive share/view link
+10. Append row to Google Sheet
+
+---
+
+## Setup
+
+From repository root:
 
 ```powershell
-cd d:\Jay\PDF-Extraction
-
 python -m venv .venv
-.\.venv\Scripts\pip install -r requirements.txt
-.\.venv\Scripts\python -m spacy download en_core_web_sm
-.\.venv\Scripts\pip install -e .
-```
-
-If `python` is not recognized, use:
-
-```powershell
-py -m venv .venv
-.\.venv\Scripts\pip install -r requirements.txt
-.\.venv\Scripts\python -m spacy download en_core_web_sm
-.\.venv\Scripts\pip install -e .
-```
-
-### 2) Put files into the inbox
-
-Copy your `.pdf` / `.docx` files into:
-
-```text
-d:\Jay\PDF-Extraction\data\storage\inbox\
-```
-
-### 3) Run the pipeline (CLI)
-
-Process everything currently in the inbox:
-
-```powershell
-cd d:\Jay\PDF-Extraction
-.\.venv\Scripts\python run.py process
-```
-
-List inbox files:
-
-```powershell
-.\.venv\Scripts\python run.py list
-```
-
-Process one file by name (file must exist inside the inbox folder):
-
-```powershell
-.\.venv\Scripts\python run.py process --file "John_Doe_Profile.pdf"
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
 ---
 
-## How to run (API server)
+## Environment Configuration
 
-Start the server:
-
-```powershell
-cd d:\Jay\PDF-Extraction
-.\.venv\Scripts\python -m profile_backend.app
-```
-
-Server runs on:
-
-- `http://127.0.0.1:5000`
-
-### API endpoints
-
-#### Health check
+1) Create `.env` from template:
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:5000/health
+Copy-Item .env.example .env
 ```
 
-Response:
-
-```json
-{"status":"ok"}
-```
-
-#### Process all inbox files
+2) Load `.env` into current PowerShell session (required before run):
 
 ```powershell
-Invoke-RestMethod -Method Post http://127.0.0.1:5000/process
-```
-
-Response example:
-
-```json
-{
-  "queued": ["D:\\Jay\\PDF-Extraction\\data\\storage\\inbox\\A.pdf"],
-  "processed": 1,
-  "ids": ["BIO199508157384"]
+Get-Content .env | ForEach-Object {
+  if ($_ -match '^\s*#' -or $_ -match '^\s*$') { return }
+  $name, $value = $_ -split '=', 2
+  Set-Item -Path "Env:$name" -Value $value
 }
 ```
 
-#### Process one file by name (NO payload)
+Important variable groups:
 
-This endpoint does **not** take any JSON body.
-You pass the file name in the URL, and the file must be present in:
-`data/storage/inbox/`.
+- Local paths:
+  - `PROFILE_STORAGE_ROOT`
+  - `PROFILE_INBOX_DIR`
+  - `PROFILE_ORGANIZED_ROOT`
+  - `PROFILE_SPREADSHEET_PATH`
+  - `PROFILE_LOG_DIR`
+- AI:
+  - `PROFILE_LLM_PROVIDER`, `PROFILE_LLM_MODEL`
+  - `OPENAI_API_KEY`, `OPENAI_BASE_URL`
+  - `DEEPAI_API_KEY`, `DEEPAI_API_URL`
+  - `OLLAMA_API_URL`, `OLLAMA_MODEL`
+- Google cloud:
+  - `PROFILE_GOOGLE_UPLOAD_CREDS_JSON`
+  - `PROFILE_GOOGLE_DRIVE_CREDS_JSON`
+  - `PROFILE_GOOGLE_SHEETS_CREDS_JSON`
+  - `PROFILE_GDRIVE_INBOX_FOLDER_ID`
+  - `PROFILE_GDRIVE_ROOT_FOLDER_ID`
+  - `PROFILE_GSHEETS_SPREADSHEET_ID`
+  - `PROFILE_GSHEETS_SHEET_NAME`
+  - `PROFILE_GDRIVE_SHARE_WITH_EMAILS` (optional)
+- API/CORS:
+  - `PROFILE_CORS_ORIGINS` (comma-separated, defaults to localhost:3000 variants)
 
-Example:
+---
+
+## Running the Project
+
+### CLI
 
 ```powershell
+python run.py list
+python run.py process
+python run.py process --file "SomeFile.pdf"
+```
+
+### API
+
+```powershell
+flask --app profile_backend.src.profile_backend.api.app:create_app run --host 0.0.0.0 --port 5000
+```
+
+Base URL: `http://127.0.0.1:5000`
+
+---
+
+## API Endpoints
+
+- `GET /health`
+- `POST /process`
+- `POST /process/<filename>`
+- `POST /cloud/upload`
+- `POST /cloud/process`
+- `POST /cloud/process/<fileIdOrExactName>`
+
+Examples:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/health
+Invoke-RestMethod -Method Post http://127.0.0.1:5000/process
 Invoke-RestMethod -Method Post "http://127.0.0.1:5000/process/John_Doe_Profile.pdf"
-```
-
-Response example:
-
-```json
-{"id":"BIO199508151013","name":"John Doe"}
-```
-
----
-
-## Spreadsheet columns (output)
-
-The system appends rows with the following columns (in this exact order):
-
-1. ID
-2. Name
-3. Gender
-4. Date of Birth (DOB)
-5. Birth Place
-6. Birth Time
-7. Height
-8. Religion & Caste
-9. Contact Number
-10. Email
-11. Address
-12. Occupation / Work
-13. Salary
-14. Education
-15. Father Name
-16. Father Occupation
-17. Mother Name
-18. Mother Occupation
-19. Hobbies
-20. Preferences
-21. Diet Preference
-22. Brothers
-23. Sisters
-24. Drive Link
-25. Upload Date
-26. Year
-
-Rules:
-
-- If a value is not present in the document, the column is **left blank**.
-- The pipeline **never overwrites existing rows**.
-
----
-
-## “Drive Link” in local mode
-
-Cloud share links don’t exist in local mode. Instead, we store:
-
-- `file:///D:/Jay/PDF-Extraction/data/storage/root/...`
-
-This is a local URI pointing to the organized file.
-When you switch to cloud storage later, you will replace this link generator function.
-
----
-
-## Configuration (paths)
-
-By default, paths are inside this repo under `data/` and `logs/`.
-
-You can override with environment variables:
-
-- `PROFILE_STORAGE_ROOT`
-- `PROFILE_INBOX_DIR`
-- `PROFILE_ORGANIZED_ROOT`
-- `PROFILE_SPREADSHEET_PATH`
-- `PROFILE_LOG_DIR`
-- `PROFILE_SPACY_MODEL` (default: `en_core_web_sm`)
-
-Example:
-
-```powershell
-$env:PROFILE_INBOX_DIR="D:\SomeOtherFolder\inbox"
-.\.venv\Scripts\python run.py process
-```
-
----
-
-## Architecture (how the code is organized)
-
-Think of the system as 5 layers:
-
-1. **Entrypoints**
-   - `run.py` (CLI)
-   - `profile_backend/app.py` (HTTP API)
-
-2. **Pipeline orchestrator**
-   - `profile_backend/pipeline.py`
-   - Controls the strict processing order
-
-3. **Extraction**
-   - `profile_backend/text_extract.py` (PDF/DOCX → plain text)
-   - `profile_backend/metadata_light.py` (fast DOB/gender hints)
-   - `profile_backend/extractor.py` (full field extraction)
-
-4. **Storage + naming**
-   - `profile_backend/organize.py` (folders, renaming, moving, link)
-
-5. **Output**
-   - `profile_backend/spreadsheet.py` (append to Excel)
-   - `profile_backend/models.py` (row model + headers)
-   - `profile_backend/ids.py` (ID generation)
-
-Cross-cutting:
-
-- `profile_backend/logging_setup.py` creates consistent logs across everything.
-- `profile_backend/config.py` defines folder paths and environment overrides.
-
----
-
-## Detailed file-by-file documentation (with key functions)
-
-Below is a beginner-friendly guide to each file and what it contains.
-
-### `run.py` (CLI entrypoint)
-
-Purpose: run the pipeline from the command line.
-
-Key function:
-
-- `main(argv=None) -> int`
-  - Parses arguments:
-    - `process` (default): process all inbox files
-    - `list`: list inbox files
-    - `--file`: process a specific file inside inbox
-  - Calls `setup_logging()` so you can see progress.
-  - Calls pipeline functions from `profile_backend/pipeline.py`.
-
-Typical usage:
-
-```powershell
-.\.venv\Scripts\python run.py process
-```
-
----
-
-### `profile_backend/config.py` (paths + tunables)
-
-Purpose: define where input/output live on disk.
-
-Important values:
-
-- `INBOX_DIR`: folder you drop files into
-- `ORGANIZED_ROOT`: where organized files are moved
-- `SPREADSHEET_PATH`: Excel output
-- `LOG_DIR`: log output folder
-- `SPACY_MODEL`: spaCy model name
-
-Helper:
-
-- `_env_path(key, default) -> Path`
-  - If an env var exists, uses it; otherwise uses the default path.
-
----
-
-### `profile_backend/logging_setup.py` (logging)
-
-Purpose: logs are required for debugging and auditing.
-
-Key function:
-
-- `setup_logging(name="profile_backend") -> logging.Logger`
-  - Logs to:
-    - Console (INFO level)
-    - `logs/profile_backend.log` (DEBUG level, rotating)
-
----
-
-### `profile_backend/text_extract.py` (PDF/DOCX → text)
-
-Purpose: the extractor works on plain text; this module converts files into text.
-
-Key functions:
-
-- `extract_text(path: Path) -> str`
-  - Dispatches by file extension:
-    - `.pdf` → `_pdf_text()`
-    - `.docx` → `_docx_text()`
-
-- `_pdf_text(path: Path) -> str`
-  - Uses `pdfplumber.open(...)`
-  - Loops pages and concatenates extracted text.
-
-- `_docx_text(path: Path) -> str`
-  - Uses `python-docx` `Document(...)`
-  - Joins all paragraph text.
-
----
-
-### `profile_backend/nlp_utils.py` (spaCy loading)
-
-Purpose: loading spaCy is heavy; we load it once and reuse it.
-
-Key function:
-
-- `get_nlp()`
-  - Lazy loads `spacy.load(SPACY_MODEL)`
-  - Cached so repeated files process faster.
-
----
-
-### `profile_backend/metadata_light.py` (Step 2: light parse)
-
-Purpose: quickly find **DOB** and **gender** before moving the file.
-
-Data model:
-
-- `LightMetadata(date_of_birth: str|None, gender: str|None)`
-  - `date_of_birth` is stored in ISO format `YYYY-MM-DD` if parsed.
-
-Key functions:
-
-- `extract_light_metadata(text: str) -> LightMetadata`
-  - Uses spaCy DATE entities + simple date regex patterns.
-  - Gender is a keyword check (Male/Female).
-
-- `_try_parse_date(s: str) -> datetime|None`
-  - Converts detected date strings into a real date object when possible.
-
----
-
-### `profile_backend/extractor.py` (Step 6: full extraction)
-
-Purpose: extract all “final columns” from the document.
-
-Important rule:
-
-- **No guessing**. If a field isn’t present, it stays blank.
-
-How extraction works:
-
-1. Look for **labeled lines** like `Email: someone@example.com`
-2. If still missing:
-   - find email via regex
-   - find phone via regex
-3. If name is still missing:
-   - spaCy PERSON entity as a fallback
-
-Key functions:
-
-- `run_full_extraction(text: str) -> (ExtractedFields, LightMetadata)`
-  - Convenience helper: runs light metadata + full extraction.
-
-- `extract_fields(text: str, light: LightMetadata|None) -> ExtractedFields`
-  - Produces all extractable fields.
-  - Uses `light` to pre-fill DOB/gender if found.
-
-- `explicit_name_from_text(text: str) -> str`
-  - If the document has `Name: ...`, this returns it.
-  - Helps avoid spaCy false positives for renaming.
-
-- `primary_person_name(text: str) -> str`
-  - Used for renaming (Step 4).
-  - Prefers `Name: ...` first; otherwise uses first spaCy PERSON.
-
-Internal helpers:
-
-- `_split_label_lines(text)` yields `(key, value)` from lines containing `:`
-- `_match_label(key)` maps keys like “DOB” to a canonical field
-- `_first_email(text)`, `_first_phone(text)` regex helpers
-
----
-
-### `profile_backend/organize.py` (Steps 3–5: organize + rename + link)
-
-Purpose: move files into `Root / Year / Gender` and rename them.
-
-Key functions:
-
-- `year_folder_from_dob(dob_iso: str|None) -> str`
-  - Extracts `YYYY` or returns `Unknown`.
-
-- `gender_folder(gender: str|None) -> str`
-  - Normalizes to `Male`, `Female`, or `Unknown`.
-
-- `filename_from_name(full_name: str, template: str) -> str`
-  - Converts `Jane Smith` → `Jane_Smith_Profile`
-  - If name is missing → `Unknown_Unknown_Profile`
-
-- `move_to_organized(src, organized_root, year, gender, new_base_name) -> Path`
-  - Creates folders if needed.
-  - Moves the file, preserves extension.
-  - If a file name already exists, adds `_1`, `_2`, ... to avoid overwriting.
-
-- `file_share_link(path: Path) -> str`
-  - Returns a local `file://` URI (placeholder for cloud link later).
-
----
-
-### `profile_backend/models.py` (data model for spreadsheet row)
-
-Purpose: keeps spreadsheet order stable and explicit.
-
-Key parts:
-
-- `SHEET_COLUMNS`: exact column names/order
-- `ProfileRecord` dataclass: holds one row’s values
-- `headers_for_sheet()`: returns `SHEET_COLUMNS`
-
----
-
-### `profile_backend/ids.py` (system ID generation)
-
-Purpose: create IDs of format `BIOYYYYMMDDXXXX`.
-
-Key function:
-
-- `generate_profile_id(dob_iso: str|None) -> str`
-  - Uses DOB if parseable → `BIO<dob_ymd><random_4_digits>`
-  - Otherwise uses today’s date.
-
----
-
-### `profile_backend/spreadsheet.py` (append to Excel)
-
-Purpose: write extracted data without overwriting.
-
-Key functions:
-
-- `ensure_workbook(path: Path)`
-  - Creates `data/profiles.xlsx` if missing
-  - Writes the header row once
-
-- `append_record(path: Path, record: ProfileRecord) -> int`
-  - Appends a new row at the end.
-  - Returns the row number written.
-
----
-
-### `profile_backend/pipeline.py` (the strict workflow)
-
-Purpose: orchestrate the processing steps in order.
-
-Key functions:
-
-- `list_inbox_files() -> list[Path]`
-  - Returns supported `.pdf`/`.docx` files from inbox sorted by name.
-
-- `process_one(path: Path) -> ProfileRecord`
-  - Core “one file” workflow:
-    - Extract text
-    - Light parse DOB/gender (Step 2)
-    - Organize + rename (Steps 3–4)
-    - Full extraction (Step 6)
-    - Build system fields (Step 7)
-    - Append to sheet (Step 8)
-
-- `process_inbox() -> list[ProfileRecord]`
-  - Calls `process_one()` for every file.
-  - Logs errors per file and continues.
-
-Private helper:
-
-- `_build_record(...) -> ProfileRecord`
-  - Combines extracted fields + system fields into the row structure.
-
----
-
-### `profile_backend/app.py` (Flask API)
-
-Purpose: run the pipeline via HTTP.
-
-Key functions:
-
-- `create_app() -> Flask`
-  - Registers routes:
-    - `GET /health`
-    - `POST /process`
-    - `POST /process/<name>`
-
-- `main()`
-  - Starts the server on port 5000.
-
-Important: `POST /process/<name>` takes **no payload**.
-
----
-
-## Examples (what to expect)
-
-### Example 1 — input
-
-If you have:
-
-```text
-data/storage/inbox/John_Doe_Profile.pdf
-```
-
-And the document contains:
-
-```text
-Name: John Doe
-Gender: Male
-Date of Birth: 12/01/2001
-Email: john@example.com
-```
-
-Then after processing you should see:
-
-- File moved to:
-  - `data/storage/root/2001/Male/John_Doe_Profile.pdf`
-- A new row appended in:
-  - `data/profiles.xlsx`
-- Log lines in:
-  - `logs/profile_backend.log`
-
----
-
-## Troubleshooting
-
-### “spaCy model not found”
-
-Run:
-
-```powershell
-.\.venv\Scripts\python -m spacy download en_core_web_sm
-```
-
-### “Nothing processed”
-
-Check:
-
-- Files are in `data/storage/inbox/`
-- Extension is `.pdf` or `.docx`
-
-### “Unknown/Unknown folder”
-
-This means DOB/gender was not found by the light parse.
-The pipeline will still process and append a sheet row, but organization uses `Unknown`.
-
----
-
-## Next upgrades (when you move to cloud)
-
-When you later switch from local storage to cloud storage:
-
-- Replace `file_share_link()` in `profile_backend/organize.py` with the cloud provider share-link logic
-- Replace `list_inbox_files()` / moving logic with cloud folder listing + move operations
-
----
-
-## AI-only extraction mode (current)
-
-The pipeline now supports an AI-only path through `profile_backend/ai_extractor.py`:
-
-- No manual label dictionary is required in the runtime flow.
-- One LLM call extracts all profile fields from raw document text.
-- Multilingual labels (Hindi/Gujarati/English mixed formats) are handled by the model.
-- Missing values are returned as empty strings (no guessing).
-
-Choose your provider with `PROFILE_LLM_PROVIDER`:
-
-- `ollama` (default, local LLM)
-- `textrazor`
-- `openai`
-- `deepai`
-
-### Ollama setup (recommended for true AI mapping without paid API)
-
-Install Ollama, pull a model, and run locally:
-
-```powershell
-ollama pull qwen2.5:7b
-```
-
-Then set:
-
-```powershell
-$env:PROFILE_LLM_PROVIDER="ollama"
-$env:OLLAMA_API_URL="http://127.0.0.1:11434/api/chat"
-$env:OLLAMA_MODEL="qwen2.5:7b"
-```
-
-### OpenAI setup
-
-```powershell
-$env:PROFILE_LLM_PROVIDER="openai"
-$env:OPENAI_API_KEY="your_openai_key"
-# Optional:
-$env:PROFILE_LLM_MODEL="gpt-4o-mini"
-$env:OPENAI_BASE_URL=""
-```
-
-### DeepAI setup
-
-```powershell
-$env:PROFILE_LLM_PROVIDER="deepai"
-$env:DEEPAI_API_KEY="your_deepai_key"
-# Optional override (defaults to DeepAI text endpoint):
-$env:DEEPAI_API_URL="https://api.deepai.org/api/text-generator"
-```
-
-### TextRazor setup
-
-```powershell
-$env:PROFILE_LLM_PROVIDER="textrazor"
-$env:TEXTRAZOR_API_KEY="your_textrazor_key"
-# Optional override:
-$env:TEXTRAZOR_API_URL="https://api.textrazor.com/"
-```
-
-Then run:
-
-```powershell
-.\.venv\Scripts\python run.py process
-```
-
----
-
-## Cloud mode (Google Drive + Google Sheets)
-
-Cloud mode keeps the local pipeline as-is and adds **separate cloud APIs**:
-
-- **Local**:
-  - `POST /process`
-  - `POST /process/<filename>`
-- **Cloud**:
-  - `POST /cloud/process`
-  - `POST /cloud/process/<fileId>`
-
-### What cloud mode does
-
-- Reads profile files from a Google Drive **Inbox folder**
-- Extracts text **in-memory** (no permanent local downloads)
-- Uses your configured AI provider to extract fields
-- Creates/uses Drive folders: `Root / Year / Gender`
-- Moves + renames the file in Drive
-- Generates a read-only **share link** and stores it in the “Drive Link” column
-- Appends a row into a Google Sheet (same column order as local Excel)
-
-### Google setup (recommended: Service Account)
-
-1. Create a Google Cloud project and enable APIs:
-   - Google Drive API
-   - Google Sheets API
-
-2. Create a **Service Account**, download the JSON key.
-
-3. Share the Drive folders and the Google Sheet with the service account email (Editor):
-   - Inbox folder (contains unprocessed files)
-   - Root folder (where organized files will be created)
-   - Google Sheet (where rows will be appended)
-
-### Required environment variables
-
-```powershell
-$env:PROFILE_GOOGLE_CREDS_JSON="D:\path\to\service-account.json"
-$env:PROFILE_GDRIVE_INBOX_FOLDER_ID="your_inbox_folder_id"
-$env:PROFILE_GDRIVE_ROOT_FOLDER_ID="your_root_folder_id"
-$env:PROFILE_GSHEETS_SPREADSHEET_ID="your_spreadsheet_id"
-$env:PROFILE_GSHEETS_SHEET_NAME="Sheet1"   # tab name
-# Optional (security): share processed files only to these emails (comma-separated).
-# If not set, NO public link permission is created.
-$env:PROFILE_GDRIVE_SHARE_WITH_EMAILS="user1@example.com,user2@example.com"
-```
-
-### Run cloud processing via API
-
-Start server:
-
-```powershell
-.\.venv\Scripts\python -m profile_backend.app
-```
-
-Process all inbox files:
-
-```powershell
 Invoke-RestMethod -Method Post http://127.0.0.1:5000/cloud/process
-```
-
-Process one file by Drive fileId:
-
-```powershell
 Invoke-RestMethod -Method Post "http://127.0.0.1:5000/cloud/process/<fileId>"
 ```
 
+Upload endpoint notes:
+
+- `POST /cloud/upload` expects `multipart/form-data`
+- field name: `files` (repeatable)
+- max 10 files
+- supports `.pdf`, `.docx`
+
+---
+
+## Outputs
+
+- Organized local files: `data/storage/root/<Year>/<Gender>/...`
+- Local spreadsheet: `data/profiles.xlsx`
+- Cloud sheet: configured Google Sheet tab
+- Logs: `logs/profile_backend.log`
+
+Record model columns (fixed order): `ID, Name, Gender, DOB, ... , Drive Link, Upload Date, Year`.
+
+---
+
+## Testing
+
+Run all tests:
+
+```powershell
+python -m unittest discover "profile_backend/tests"
+```
+
+Current tests:
+
+- `test_api_smoke.py`: verifies `/health` response
+- `test_domain_helpers.py`: validates DOB normalization/year extraction, gender mapping, and filename generation
+
+---
+
+## File-by-File Code Documentation
+
+### Root
+
+- `run.py`
+  - **Purpose**: Main command-line entrypoint used by operators and developers for local processing.
+  - **What it does**:
+    - Parses CLI arguments (`process`, `list`, and optional `--file`).
+    - Initializes centralized logging via `setup_logging()`.
+    - Delegates real work to application service layer:
+      - `list_inbox_files()`
+      - `process_inbox()`
+      - `process_one(path)`
+    - Resolves single-file path against configured inbox directory from `settings`.
+  - **Why it exists**: Keeps operational usage simple without exposing internal module structure.
+
+### Package bootstrap
+
+- `profile_backend/src/__init__.py`
+  - **Purpose**: Marks `src` as importable package namespace.
+  - **What it does**: No runtime logic; enables stable package discovery/import behavior.
+- `profile_backend/src/profile_backend/__init__.py`
+  - **Purpose**: Declares the main backend package.
+  - **What it does**: Exposes package version metadata (`__version__`).
+
+### API layer
+
+- `profile_backend/src/profile_backend/api/__init__.py`
+  - **Purpose**: Marks API folder as a package.
+  - **What it does**: No runtime behavior; structural.
+- `profile_backend/src/profile_backend/api/app.py`
+  - **Purpose**: HTTP transport/controller layer.
+  - **What it does**:
+    - Creates Flask app through `create_app()`.
+    - Defines all public endpoints (`/health`, `/process`, `/cloud/*`).
+    - Validates request-level concerns (e.g., missing upload files, file count limits, local path safety).
+    - Calls application services for business operations.
+    - Converts service results/exceptions into JSON HTTP responses.
+  - **Design note**: Route functions are intentionally thin; business logic remains outside API layer.
+
+### Application layer
+
+- `profile_backend/src/profile_backend/application/__init__.py`
+  - **Purpose**: Marks application package.
+  - **What it does**: Structural package declaration only.
+- `profile_backend/src/profile_backend/application/services/__init__.py`
+  - **Purpose**: Marks service package.
+  - **What it does**: Structural package declaration only.
+- `profile_backend/src/profile_backend/application/services/local_processing.py`:
+  - **Purpose**: Encapsulates local processing use-cases.
+  - **Core functions**:
+    - `list_inbox_files()`: returns sorted supported local files (`.pdf`, `.docx`), creates inbox directory if missing.
+    - `process_one(path)`: processes one local file end-to-end.
+    - `process_inbox()`: batch processes all inbox files with per-file exception handling.
+  - **Internal behavior**:
+    - Extracts text from local file.
+    - Calls AI extractor for structured fields.
+    - Normalizes DOB and derives year.
+    - Applies domain naming/foldering rules.
+    - Moves file to organized target.
+    - Builds `ProfileRecord` and appends row to Excel.
+- `profile_backend/src/profile_backend/application/services/cloud_processing.py`:
+  - **Purpose**: Encapsulates cloud processing use-cases.
+  - **Core functions**:
+    - `_validate_cloud_config()`: guards execution with required env vars.
+    - `process_cloud_inbox()`: batch processing for Drive inbox.
+    - `process_cloud_one(...)`: one-file cloud pipeline.
+    - `upload_to_cloud_inbox(uploaded_files)`: multipart upload helper for `/cloud/upload`.
+  - **Internal behavior**:
+    - Builds Drive/Sheets clients.
+    - Reads file bytes from Drive and extracts text.
+    - Performs AI extraction and DOB normalization.
+    - Creates/ensures destination folder hierarchy in Drive.
+    - Moves/renames file in Drive.
+    - Generates share link and appends output row to Google Sheets.
+
+### Core layer
+
+- `profile_backend/src/profile_backend/core/__init__.py`
+  - **Purpose**: Core package marker.
+  - **What it does**: Structural package declaration only.
+- `profile_backend/src/profile_backend/core/settings.py`:
+  - **Purpose**: Single source of truth for runtime configuration.
+  - **Main constructs**:
+    - `Settings` (frozen dataclass) containing local, AI, and cloud config fields.
+    - `_env_path()` for env-driven path override handling.
+    - `load_settings()` to assemble config from environment/defaults.
+    - global `settings` singleton used across layers.
+  - **Important behavior**:
+    - Resolves project-relative defaults when env vars are not provided.
+    - Separates Drive-processing credentials vs upload credentials.
+- `profile_backend/src/profile_backend/core/logging.py`:
+  - **Purpose**: Centralized logging bootstrap.
+  - **What it does**:
+    - Creates log directory.
+    - Registers rotating file handler (`logs/profile_backend.log`) and console handler.
+    - Uses consistent message format and levels.
+    - Prevents duplicate handlers on repeated setup calls.
+
+### Domain layer
+
+- `profile_backend/src/profile_backend/domain/__init__.py`
+  - **Purpose**: Domain package marker.
+  - **What it does**: Structural package declaration only.
+- `profile_backend/src/profile_backend/domain/models.py`:
+  - **Purpose**: Defines canonical output model and column contract.
+  - **What it does**:
+    - Declares `SHEET_COLUMNS` with final fixed order.
+    - Defines `ProfileRecord` dataclass for one output row.
+    - Provides `to_row_list()` and `headers_for_sheet()` helpers.
+  - **Why important**: Guarantees stable schema for both Excel and Google Sheets outputs.
+- `profile_backend/src/profile_backend/domain/ids.py`:
+  - **Purpose**: Generates system-level record IDs.
+  - **What it does**:
+    - Builds ID format `BIOYYYYMMDDXXXX`.
+    - Uses DOB date portion when parseable, else current date fallback.
+    - Appends random 4-digit suffix.
+- `profile_backend/src/profile_backend/domain/organize.py`:
+  - **Purpose**: Domain rules for naming, folders, and normalization.
+  - **Core functions**:
+    - `normalize_dob()` converts common human date formats into ISO.
+    - `year_folder_from_dob()` derives year folder from normalized DOB.
+    - `gender_folder()` normalizes to `Male`/`Female`/`Unknown`.
+    - `filename_from_name()` maps names to template-friendly file base name.
+    - `move_to_organized()` handles destination folder creation and collision-safe rename.
+    - `file_share_link()` returns local `file://` URI.
+  - **Why important**: Central place for business rules reused by both modes.
+
+### Infrastructure layer
+
+- `profile_backend/src/profile_backend/infrastructure/__init__.py`
+  - **Purpose**: Infrastructure package marker.
+  - **What it does**: Structural package declaration only.
+
+AI adapters:
+
+- `profile_backend/src/profile_backend/infrastructure/ai/__init__.py`
+  - **Purpose**: AI adapter package marker.
+- `profile_backend/src/profile_backend/infrastructure/ai/extractor.py`:
+  - **Purpose**: Provider abstraction for field extraction from raw text.
+  - **Main constructs**:
+    - `AIExtractedFields` dataclass schema.
+    - Provider implementations: `_extract_openai`, `_extract_ollama`, `_extract_deepai`.
+    - Dispatcher: `extract_fields_ai_provider(text)`.
+  - **Behavior details**:
+    - Sanitizes returned values.
+    - Normalizes DOB centrally before passing fields upward.
+    - Enforces JSON-shaped response interpretation and error handling.
+
+File adapters:
+
+- `profile_backend/src/profile_backend/infrastructure/files/__init__.py`
+  - **Purpose**: File adapter package marker.
+- `profile_backend/src/profile_backend/infrastructure/files/text_extract.py`:
+  - **Purpose**: Text extraction from documents.
+  - **Core functions**:
+    - `extract_text(path)` for local files.
+    - `extract_text_bytes(suffix, data)` for cloud byte streams.
+  - **Supported types**: `.pdf`, `.docx`.
+  - **Libraries**: `pdfplumber`, `python-docx`.
+
+Google adapters:
+
+- `profile_backend/src/profile_backend/infrastructure/google/__init__.py`
+  - **Purpose**: Google adapter package marker.
+- `profile_backend/src/profile_backend/infrastructure/google/auth.py`:
+  - **Purpose**: Credential loading for Google APIs.
+  - **What it does**:
+    - Supports service-account JSON directly.
+    - Supports OAuth client secrets with token caching (`token.json`).
+    - Refreshes expired OAuth tokens when possible.
+- `profile_backend/src/profile_backend/infrastructure/google/drive_client.py`:
+  - **Purpose**: Encapsulates all Drive API calls used by cloud services.
+  - **Main capabilities**:
+    - Build Drive client.
+    - List inbox files with MIME filtering.
+    - Download bytes.
+    - Upload file to target folder.
+    - Ensure folder existence.
+    - Move + rename Drive file.
+    - Create/retrieve restricted share link.
+  - **Data model**: `DriveFile` dataclass for typed file metadata.
+- `profile_backend/src/profile_backend/infrastructure/google/sheets_client.py`:
+  - **Purpose**: Encapsulates Sheets API operations.
+  - **Main capabilities**:
+    - Build Sheets client.
+    - Append a row to a configured sheet range (`A:Z`).
+
+Storage adapters:
+
+- `profile_backend/src/profile_backend/infrastructure/storage/__init__.py`
+  - **Purpose**: Storage adapter package marker.
+- `profile_backend/src/profile_backend/infrastructure/storage/spreadsheet.py`:
+  - **Purpose**: Local Excel persistence adapter.
+  - **Core functions**:
+    - `ensure_workbook(path)` creates workbook and writes header row when file is missing.
+    - `append_record(path, record)` appends one structured row and saves workbook.
+  - **Why important**: Keeps Excel-specific I/O out of business logic.
+
+### CLI helper package
+
+- `profile_backend/src/profile_backend/cli/__init__.py`
+  - **Purpose**: CLI package marker.
+- `profile_backend/src/profile_backend/cli/main.py`
+  - **Purpose**: Programmatic CLI helpers.
+  - **What it does**:
+    - `run_local()` initializes logging and runs local batch process.
+    - `run_cloud()` initializes logging and runs cloud batch process.
+  - **Usage**: Useful for future alternate entrypoints or scheduler integration.
+
+### Tests
+
+- `profile_backend/tests/test_api_smoke.py`
+  - **Purpose**: Smoke test for API boot + health endpoint.
+  - **What it validates**: app factory works, `/health` contract is stable.
+- `profile_backend/tests/test_domain_helpers.py`
+  - **Purpose**: Unit tests for domain normalization and naming rules.
+  - **What it validates**:
+    - DOB normalization (`15-01-1990` -> `1990-01-15`)
+    - Year extraction from ISO/non-ISO input
+    - Gender mapping
+    - Filename template behavior for known/unknown names
+
+---
+
+## Operational Notes
+
+- Keep `__init__.py` files (required for package imports).
+- `__pycache__` folders are auto-generated and safe to ignore/delete.
+- If env values are updated, restart process/server after reloading `.env`.

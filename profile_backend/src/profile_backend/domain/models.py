@@ -1,12 +1,10 @@
-"""Row model aligned with spreadsheet columns."""
+"""Domain row model aligned with spreadsheet columns."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
 from typing import Any
 
-
-# Column order matches user specification
 SHEET_COLUMNS = [
     "ID",
     "Name",
@@ -39,8 +37,6 @@ SHEET_COLUMNS = [
 
 @dataclass
 class ProfileRecord:
-    """One spreadsheet row (final columns)."""
-
     id: str
     name: str
     gender: str
