@@ -15,7 +15,7 @@ client-secret-old.json
 service-account.json
 token.json
 data/storage/temp/
-
+data/storage/google_cloud_configs/
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
