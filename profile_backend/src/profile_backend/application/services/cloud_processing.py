@@ -6,6 +6,11 @@ import logging
 from datetime import date
 from pathlib import Path
 
+from profile_backend.src.profile_backend.application.google_cloud_config import (
+    GoogleCloudRuntimeConfig,
+    validate_cloud_config,
+    validate_upload_config,
+)
 from profile_backend.src.profile_backend.core.settings import settings
 from profile_backend.src.profile_backend.domain.ids import generate_profile_id
 from profile_backend.src.profile_backend.domain.models import ProfileRecord
@@ -43,37 +48,29 @@ def _suffix_from_mime(mime_type: str, name: str) -> str:
     return Path(name).suffix.lower()
 
 
-def _validate_cloud_config() -> None:
-    missing = []
-    if not settings.google_drive_creds_json:
-        missing.append("PROFILE_GOOGLE_DRIVE_CREDS_JSON or PROFILE_GOOGLE_CREDS_JSON")
-    if not settings.google_sheets_creds_json:
-        missing.append("PROFILE_GOOGLE_SHEETS_CREDS_JSON or PROFILE_GOOGLE_CREDS_JSON")
-    if not settings.gdrive_inbox_folder_id:
-        missing.append("PROFILE_GDRIVE_INBOX_FOLDER_ID")
-    if not settings.gdrive_root_folder_id:
-        missing.append("PROFILE_GDRIVE_ROOT_FOLDER_ID")
-    if not settings.gsheets_spreadsheet_id:
-        missing.append("PROFILE_GSHEETS_SPREADSHEET_ID")
-    if missing:
-        raise RuntimeError("Missing cloud config env vars: " + ", ".join(missing))
-
-
-def process_cloud_inbox() -> list[ProfileRecord]:
-    _validate_cloud_config()
-    drive = build_drive_service(settings.google_drive_creds_json)
-    sheets = build_sheets_service(settings.google_sheets_creds_json)
+def process_cloud_inbox(cfg: GoogleCloudRuntimeConfig | None = None) -> list[ProfileRecord]:
+    resolved = cfg or GoogleCloudRuntimeConfig.from_settings()
+    validate_cloud_config(resolved)
+    drive = build_drive_service(resolved.google_drive_creds_json)
+    sheets = build_sheets_service(resolved.google_sheets_creds_json)
     results: list[ProfileRecord] = []
-    for f in list_inbox_files(drive, settings.gdrive_inbox_folder_id):
+    for f in list_inbox_files(drive, resolved.gdrive_inbox_folder_id):
         try:
-            results.append(process_cloud_one(drive, sheets, f.id, f.name, f.mime_type))
+            results.append(process_cloud_one(drive, sheets, f.id, f.name, f.mime_type, resolved))
         except Exception as exc:
             logger.exception("Failed processing Drive file %s (%s): %s", f.name, f.id, exc)
     return results
 
 
-def process_cloud_one(drive, sheets, file_id: str, name: str, mime_type: str) -> ProfileRecord:
-    _validate_cloud_config()
+def process_cloud_one(
+    drive,
+    sheets,
+    file_id: str,
+    name: str,
+    mime_type: str,
+    cfg: GoogleCloudRuntimeConfig,
+) -> ProfileRecord:
+    validate_cloud_config(cfg)
     data = download_file_bytes(drive, file_id)
     suffix = _suffix_from_mime(mime_type, name)
     text = extract_text_bytes(suffix, data)
@@ -84,11 +81,11 @@ def process_cloud_one(drive, sheets, file_id: str, name: str, mime_type: str) ->
     gender_dir = gender_folder(extracted.gender)
     base_name = filename_from_name(extracted.name, settings.profile_filename_template)
 
-    year_folder_id = ensure_folder(drive, settings.gdrive_root_folder_id, year_dir)
+    year_folder_id = ensure_folder(drive, cfg.gdrive_root_folder_id, year_dir)
     gender_folder_id = ensure_folder(drive, year_folder_id, gender_dir)
     move_and_rename_file(drive, file_id=file_id, new_parent_id=gender_folder_id, new_name=f"{base_name}{suffix}")
 
-    share_emails = [e.strip() for e in settings.gdrive_share_with_emails.split(",") if e.strip()]
+    share_emails = [e.strip() for e in cfg.gdrive_share_with_emails.split(",") if e.strip()]
     share_link = ensure_share_link(drive, file_id, share_with_emails=share_emails)
     upload_date = date.today().isoformat()
     year_val = year_folder_from_dob(extracted.dob)
@@ -125,15 +122,17 @@ def process_cloud_one(drive, sheets, file_id: str, name: str, mime_type: str) ->
     )
     append_row(
         sheets,
-        spreadsheet_id=settings.gsheets_spreadsheet_id,
-        sheet_name=settings.gsheets_sheet_name,
+        spreadsheet_id=cfg.gsheets_spreadsheet_id,
+        sheet_name=cfg.gsheets_sheet_name,
         row_values=record.to_row_list(),
     )
     return record
 
 
-def upload_to_cloud_inbox(uploaded_files) -> list[dict[str, str]]:
-    drive = build_drive_service(settings.google_upload_creds_json)
+def upload_to_cloud_inbox(uploaded_files, cfg: GoogleCloudRuntimeConfig | None = None) -> list[dict[str, str]]:
+    resolved = cfg or GoogleCloudRuntimeConfig.from_settings()
+    validate_upload_config(resolved)
+    drive = build_drive_service(resolved.google_upload_creds_json)
     allowed = {".pdf", ".docx"}
     results: list[dict[str, str]] = []
     for f in uploaded_files:
@@ -145,10 +144,10 @@ def upload_to_cloud_inbox(uploaded_files) -> list[dict[str, str]]:
         data = f.read()
         uploaded = upload_file_to_folder(
             drive,
-            parent_folder_id=settings.gdrive_inbox_folder_id,
+            parent_folder_id=resolved.gdrive_inbox_folder_id,
             file_name=name,
             data=data,
-            mime_type=f.mimetype or None,
+            mime_type=None,
         )
         results.append({"id": uploaded.id, "name": uploaded.name, "mimeType": uploaded.mime_type})
     return results
