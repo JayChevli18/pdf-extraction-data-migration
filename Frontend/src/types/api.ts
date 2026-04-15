@@ -34,6 +34,36 @@ export type CloudUploadResponse = {
   files: CloudUploadItem[];
 };
 
+export type CloudConfigRegisterResponse = {
+  config_id: string;
+};
+
+export type CloudConfigDeleteResponse = {
+  deleted: boolean;
+};
+
+export type TenantCloudFilePayload = {
+  fileIdOrName: string;
+  configId: string;
+};
+
+export type TenantCloudFilesPayload = {
+  files: File[];
+  configId: string;
+};
+
+export type CloudConfigRegisterPayload = {
+  serviceAccountFile: File;
+  clientSecretFile?: File;
+  driveCredentialsFile?: File;
+  sheetsCredentialsFile?: File;
+  gdriveInboxFolderId: string;
+  gdriveRootFolderId: string;
+  gsheetsSpreadsheetId: string;
+  gsheetsSheetName?: string;
+  gdriveShareWithEmails?: string;
+};
+
 export type ApiErrorShape = {
   error?: string;
 };
