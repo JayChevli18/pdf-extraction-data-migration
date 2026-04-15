@@ -1,14 +1,5 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import {
-  getHealth,
-  processCloudInbox,
-  processCloudOne,
-  processInbox,
-  processSingle,
-  uploadCloudFiles,
-} from "@/lib/api-client";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { ApiLoadingOverlay } from "@/components/dashboard/loading-overlay";
 import { ResultPanel } from "@/components/dashboard/result-panel";
@@ -16,98 +7,78 @@ import {
   CloudProcessingSection,
   CloudUploadSection,
   LocalProcessingSection,
+  TenantCloudSection,
 } from "@/components/dashboard/sections";
-import { Message } from "@/components/dashboard/types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useDashboardState } from "@/components/dashboard/use-dashboard-state";
 
-export function DashboardContent() {
-  const health = useQuery({
-    queryKey: ["health"],
-    queryFn: getHealth,
-    refetchInterval: 15000,
-  });
-
-  const localBatch = useMutation({ mutationFn: processInbox });
-  const localOne = useMutation({ mutationFn: processSingle });
-  const cloudBatch = useMutation({ mutationFn: processCloudInbox });
-  const cloudOne = useMutation({ mutationFn: processCloudOne });
-  const cloudUpload = useMutation({ mutationFn: uploadCloudFiles });
-  const isAnyApiLoading =
-    localBatch.isPending ||
-    localOne.isPending ||
-    cloudBatch.isPending ||
-    cloudOne.isPending ||
-    cloudUpload.isPending;
-
-  const activeActionLabel = cloudBatch.isPending
-    ? "Running cloud pipeline"
-    : cloudUpload.isPending
-    ? "Uploading files to cloud inbox"
-    : cloudOne.isPending
-    ? "Processing single cloud file"
-    : localBatch.isPending
-    ? "Running local pipeline"
-    : localOne.isPending
-    ? "Processing single local file"
-    : "Processing request";
-
-  const messages: Message[] = [];
-  if (cloudUpload.data) {
-    messages.push({
-      title: "Cloud upload complete",
-      body: `Uploaded ${cloudUpload.data.uploaded} file(s) to cloud inbox.`,
-    });
-  }
-  if (cloudBatch.data) {
-    messages.push({
-      title: "Cloud pipeline complete",
-      body: `Processed ${cloudBatch.data.processed} file(s) from cloud inbox.`,
-    });
-  }
-  if (cloudOne.data) {
-    messages.push({
-      title: "Cloud single-file complete",
-      body: `${cloudOne.data.name} processed. Drive link: ${cloudOne.data.drive_link}`,
-    });
-  }
-  if (localBatch.data) {
-    messages.push({
-      title: "Local pipeline complete",
-      body: `Processed ${localBatch.data.processed} local file(s).`,
-    });
-  }
-  if (localOne.data) {
-    messages.push({
-      title: "Local single-file complete",
-      body: `Record ${localOne.data.id} generated for ${localOne.data.name}.`,
-    });
-  }
+export const DashboardContent = () => {
+  const dashboard = useDashboardState();
 
   return (
     <>
-      {isAnyApiLoading ? (
-        <ApiLoadingOverlay actionLabel={activeActionLabel} />
+      {dashboard.isAnyApiLoading ? (
+        <ApiLoadingOverlay actionLabel={dashboard.activeActionLabel} />
       ) : null}
       <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 bg-gradient-to-b from-blue-50 via-white to-slate-100 px-4 py-8 text-slate-900 md:px-8">
-        <DashboardHeader status={health.data?.status} hasError={Boolean(health.error)} />
+        <DashboardHeader status={dashboard.healthStatus} hasError={dashboard.healthError} />
 
         <div className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
-          <div className="space-y-6">
-            <CloudUploadSection onUpload={(files) => cloudUpload.mutate(files)} />
-            <CloudProcessingSection
-              isCloudBatchPending={cloudBatch.isPending}
-              onCloudBatch={() => cloudBatch.mutate()}
-              onCloudOne={(value) => cloudOne.mutate(value)}
-            />
-            <LocalProcessingSection
-              isLocalBatchPending={localBatch.isPending}
-              onLocalBatch={() => localBatch.mutate()}
-              onLocalOne={(value) => localOne.mutate(value)}
-            />
-          </div>
+          <Tabs defaultValue="cloud" className="space-y-4">
+            <TabsList className="w-full justify-start gap-2 rounded-xl bg-white p-1 shadow-sm">
+              <TabsTrigger
+                value="cloud"
+                className="cursor-pointer px-4 text-slate-600 data-active:bg-blue-600 data-active:text-white"
+              >
+                Cloud
+              </TabsTrigger>
+              <TabsTrigger
+                value="tenant"
+                className="cursor-pointer px-4 text-slate-600 data-active:bg-indigo-600 data-active:text-white"
+              >
+                Tenant Cloud
+              </TabsTrigger>
+              <TabsTrigger
+                value="local"
+                className="cursor-pointer px-4 text-slate-600 data-active:bg-slate-800 data-active:text-white"
+              >
+                Local
+              </TabsTrigger>
+            </TabsList>
 
-          <ResultPanel messages={messages} />
+            <TabsContent value="cloud" className="space-y-6">
+              <CloudUploadSection onUpload={dashboard.runCloudUpload} />
+              <CloudProcessingSection
+                isCloudBatchPending={dashboard.cloudBatchPending}
+                onCloudBatch={dashboard.runCloudBatch}
+                onCloudOne={dashboard.runCloudOne}
+              />
+            </TabsContent>
+
+            <TabsContent value="tenant">
+              <TenantCloudSection
+                currentConfigId={dashboard.tenantConfigId}
+                isTenantCloudBatchPending={dashboard.tenantCloudBatchPending}
+                onConfigRegister={dashboard.handleRegisterConfig}
+                onConfigSelect={dashboard.setTenantConfigId}
+                onTenantCloudUpload={dashboard.handleTenantUpload}
+                onTenantCloudBatch={dashboard.runTenantCloudBatch}
+                onTenantCloudOne={dashboard.runTenantCloudOne}
+              />
+            </TabsContent>
+
+            <TabsContent value="local">
+              <LocalProcessingSection
+                isLocalBatchPending={dashboard.localBatchPending}
+                onLocalBatch={dashboard.runLocalBatch}
+                onLocalOne={dashboard.runLocalOne}
+              />
+            </TabsContent>
+          </Tabs>
+
+          <ResultPanel messages={dashboard.messages} />
         </div>
       </main>
     </>
   );
-}
+};
