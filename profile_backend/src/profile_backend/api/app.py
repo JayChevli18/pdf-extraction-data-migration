@@ -84,7 +84,12 @@ def create_app() -> Flask:
         if not target:
             return jsonify({"error": "file not found in inbox (by id or exact name)"}), 404
         cfg = GoogleCloudRuntimeConfig.from_settings()
-        rec = process_cloud_one(drive, sheets, target.id, target.name, target.mime_type, cfg)
+        try:
+            rec = process_cloud_one(drive, sheets, target.id, target.name, target.mime_type, cfg)
+        except RuntimeError as exc:
+            message = str(exc)
+            status = 504 if "timed out" in message.lower() else 502
+            return jsonify({"error": message}), status
         return jsonify({"id": rec.id, "name": rec.name, "drive_link": rec.drive_link})
 
     @app.post("/cloud/upload")
@@ -155,7 +160,12 @@ def create_app() -> Flask:
             target = next((f for f in files if f.name.strip().lower() == wanted), None)
         if not target:
             return jsonify({"error": "file not found in inbox (by id or exact name)"}), 404
-        rec = process_cloud_one(drive, sheets, target.id, target.name, target.mime_type, cfg)
+        try:
+            rec = process_cloud_one(drive, sheets, target.id, target.name, target.mime_type, cfg)
+        except RuntimeError as exc:
+            message = str(exc)
+            status = 504 if "timed out" in message.lower() else 502
+            return jsonify({"error": message}), status
         return jsonify({"id": rec.id, "name": rec.name, "drive_link": rec.drive_link})
 
     @app.post("/cloud/tenant/upload")

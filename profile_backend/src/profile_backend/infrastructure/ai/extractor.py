@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import socket
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -101,8 +102,19 @@ def _extract_ollama(text: str) -> AIExtractedFields:
         method="POST",
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        envelope = json.loads(resp.read().decode("utf-8", errors="replace"))
+    try:
+        with urllib.request.urlopen(req, timeout=480) as resp:
+            envelope = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except TimeoutError as exc:
+        raise RuntimeError(
+            "Ollama request timed out after 480 seconds. Ensure Ollama is running and/or use a smaller/faster model."
+        ) from exc
+    except socket.timeout as exc:
+        raise RuntimeError(
+            "Ollama request timed out after 480 seconds. Ensure Ollama is running and/or use a smaller/faster model."
+        ) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Ollama request failed: {exc.reason}") from exc
     msg = envelope.get("message") if isinstance(envelope, dict) else None
     content = _safe_text(msg.get("content")) if isinstance(msg, dict) else ""
     if not content:
